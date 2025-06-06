@@ -1,6 +1,6 @@
 ## Description
 
-This script, `exe_redfish.py`, executes Redfish commands from an Excel file and outputs the results to another Excel file.
+This script, `redfish_agent.py`, executes Redfish commands from an Excel file and outputs the results to another Excel file.
 
 ## Installation
 
@@ -40,5 +40,8 @@ This script, `exe_redfish.py`, executes Redfish commands from an Excel file and 
      
     ```bash
     python3 redfish_agent.py -u user_name -p user_password -r https://127.0.0.1:5101
+    ```
+    ```bash
+    python3 redfish_agent.py -u user_name -p user_password -r https://127.0.0.1:5101 -f input.xlsx -o output.xlsx
     ```
 
