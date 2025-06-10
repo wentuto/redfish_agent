@@ -36,6 +36,35 @@ def parse_change_username_endpoint(endpoint, username_to_id_map):
             print(f"[!] Warning: No ID found for username {username_key}")
     return endpoint
 
+def find_username_id(method, endpoint, status_code, response_json, username_to_id_map):
+    # Store username to ID mapping for account creation
+    check_then_store = False
+    if (method.upper() == "POST" and 
+        endpoint == "/redfish/v1/AccountService/Accounts" and 
+        status_code == 201):
+        check_then_store = True
+        
+    # Also store username to ID mapping from GET requests to specific account endpoints
+    elif (method.upper() == "GET" and 
+            endpoint.startswith("/redfish/v1/AccountService/Accounts/") and
+            endpoint != "/redfish/v1/AccountService/Accounts/" and
+            status_code == 200):
+        check_then_store = True
+
+    # Also store username to ID mapping from update operations (PATCH/PUT)
+    elif ((method.upper() == "PATCH" or method.upper() == "PUT") and 
+            endpoint.startswith("/redfish/v1/AccountService/Accounts/") and
+            endpoint != "/redfish/v1/AccountService/Accounts/" and
+            status_code in [200, 202, 204]):
+        check_then_store = True
+ 
+    if check_then_store:
+        if "UserName" in response_json and "Id" in response_json:
+            username_value = response_json["UserName"]
+            id_value = response_json["Id"]
+            username_to_id_map[username_value] = id_value
+            print(f"[*] Stored mapping: {username_value} -> {id_value}")
+
 def execute_redfish(username, password, root_url, excel_path='commands.xlsx', output_excel_path='output.xlsx'):
     try:
         wb = openpyxl.load_workbook(excel_path)
@@ -92,17 +121,10 @@ def execute_redfish(username, password, root_url, excel_path='commands.xlsx', ou
                 try:
                     response_json = response.json()
                     response_text = json.dumps(response_json, indent=4, ensure_ascii=False)
-                    
-                    # Store username to ID mapping for account creation
-                    if (method.upper() == "POST" and 
-                        endpoint == "/redfish/v1/AccountService/Accounts" and 
-                        status_code == 201):
-                        if "UserName" in response_json and "Id" in response_json:
-                            username_value = response_json["UserName"]
-                            id_value = response_json["Id"]
-                            username_to_id_map[username_value] = id_value
-                            print(f"[*] Stored mapping: {username_value} -> {id_value}")
-                            
+
+                    # Check if the response contains a username to ID mapping
+                    find_username_id(method, endpoint, status_code, response_json, username_to_id_map)
+
                 except json.JSONDecodeError:
                     response_text = response.text  
                 print(f"Status Code: {status_code}")
