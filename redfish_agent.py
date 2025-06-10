@@ -3,6 +3,7 @@ import requests
 import openpyxl
 import json
 import time
+import re
 from urllib.parse import urljoin
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from openpyxl.utils import get_column_letter
@@ -10,6 +11,30 @@ from openpyxl.styles import Alignment
 
 # ignore SSL warnings
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+def delay_function(endpoint):
+    try:
+        delay_seconds = int(endpoint)
+        print(f"[*] Delay for {delay_seconds} seconds")
+        for remaining in range(delay_seconds, 0, -1):
+            print(f"    Remaining: {remaining} seconds", end='\r')
+            time.sleep(1)
+        print("    Delay complete. Moving to next command.\n")
+    except ValueError:
+        print(f"[!] Invalid delay time: {endpoint}")
+
+def parse_change_username_endpoint(endpoint, username_to_id_map):
+    pattern = r'\${([^.]+)\.id}'
+    match = re.search(pattern, endpoint)
+    if match:
+        username_key = match.group(1)
+        if username_key in username_to_id_map:
+            endpoint = re.sub(pattern, username_to_id_map[username_key], endpoint)
+            print(f"username_key: {username_key}, ID: {username_to_id_map[username_key]}")
+            print(f"[*] Replaced dynamic endpoint with ID: {endpoint}")
+        else:
+            print(f"[!] Warning: No ID found for username {username_key}")
+    return endpoint
 
 def execute_redfish(username, password, root_url, excel_path='commands.xlsx', output_excel_path='output.xlsx'):
     try:
@@ -21,7 +46,9 @@ def execute_redfish(username, password, root_url, excel_path='commands.xlsx', ou
         output_sheet = output_wb.active
         output_sheet.append(["Method", "Endpoint", "Payload", "Status Code", "Response"])  # write title
 
-        # Dynamically adjust column widths based on header length
+        # Dictionary to store username to id mappings
+        username_to_id_map = {}
+        
         for col_num, column_title in enumerate(["Method", "Endpoint", "Payload", "Status Code", "Response"], 1):
             column_letter = get_column_letter(col_num)
             output_sheet.column_dimensions[column_letter].width = max(10, len(column_title) + 2)  # Minimum width of 10
@@ -30,16 +57,12 @@ def execute_redfish(username, password, root_url, excel_path='commands.xlsx', ou
             method, endpoint, payload = row
 
             if method.strip().lower() == "delay":
-                try:
-                    delay_seconds = int(endpoint)
-                    print(f"[*] Delay for {delay_seconds} seconds")
-                    for remaining in range(delay_seconds, 0, -1):
-                        print(f"    Remaining: {remaining} seconds", end='\r')
-                        time.sleep(1)
-                    print("    Delay complete. Moving to next command.\n")
-                except ValueError:
-                    print(f"[!] Invalid delay time: {endpoint}")
+                delay_function(endpoint) 
                 continue
+
+            # Check if endpoint contains ${username.id} pattern and replace with the stored ID
+            if "${" in endpoint and "id}" in endpoint:
+                endpoint = parse_change_username_endpoint(endpoint, username_to_id_map) 
 
             url = urljoin(root_url, endpoint)
             headers = {"Content-Type": "application/json"}
@@ -68,7 +91,18 @@ def execute_redfish(username, password, root_url, excel_path='commands.xlsx', ou
                 status_code = response.status_code
                 try:
                     response_json = response.json()
-                    response_text = json.dumps(response_json, indent=4, ensure_ascii=False) 
+                    response_text = json.dumps(response_json, indent=4, ensure_ascii=False)
+                    
+                    # Store username to ID mapping for account creation
+                    if (method.upper() == "POST" and 
+                        endpoint == "/redfish/v1/AccountService/Accounts" and 
+                        status_code == 201):
+                        if "UserName" in response_json and "Id" in response_json:
+                            username_value = response_json["UserName"]
+                            id_value = response_json["Id"]
+                            username_to_id_map[username_value] = id_value
+                            print(f"[*] Stored mapping: {username_value} -> {id_value}")
+                            
                 except json.JSONDecodeError:
                     response_text = response.text  
                 print(f"Status Code: {status_code}")
