@@ -2,6 +2,7 @@ import argparse
 import requests
 import openpyxl
 import json
+import time
 from urllib.parse import urljoin
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from openpyxl.utils import get_column_letter
@@ -27,6 +28,18 @@ def execute_redfish(username, password, root_url, excel_path='commands.xlsx', ou
 
         for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), 2):
             method, endpoint, payload = row
+
+            if method.strip().lower() == "delay":
+                try:
+                    delay_seconds = int(endpoint)
+                    print(f"[*] Delay for {delay_seconds} seconds")
+                    for remaining in range(delay_seconds, 0, -1):
+                        print(f"    Remaining: {remaining} seconds", end='\r')
+                        time.sleep(1)
+                    print("    Delay complete. Moving to next command.\n")
+                except ValueError:
+                    print(f"[!] Invalid delay time: {endpoint}")
+                continue
 
             url = urljoin(root_url, endpoint)
             headers = {"Content-Type": "application/json"}
