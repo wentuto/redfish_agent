@@ -36,14 +36,12 @@ This script, `redfish_agent.py`, executes Redfish commands from an Excel file an
         *   **Endpoint:** Redfish endpoint (e.g., `/redfish/v1/Systems`).
         *   **Payload:** JSON payload for the request (can be empty).
 
-2.  **Using Endpoint Macros:**
+    Using Endpoint Macros in the excel command file
 
     The script supports dynamic endpoint substitution using the `${username.id}` macro pattern:
     
-    * When you create a user account with a POST request to `/redfish/v1/AccountService/Accounts`, 
-      the script automatically stores a mapping between the username and its assigned ID.
-    * In subsequent requests, you can use `${username.id}` in your endpoints, and the script will 
-      replace it with the actual ID value.
+    * When you create a user account with a POST request to `/redfish/v1/AccountService/Accounts`, the script automatically stores a mapping between the username and its assigned ID.
+    * In subsequent requests, you can use `${username.id}` in your endpoints, and the script will replace it with the actual ID value.
     
     Example workflow:
     
@@ -59,7 +57,7 @@ This script, `redfish_agent.py`, executes Redfish commands from an Excel file an
     
     The script will automatically replace `${testuser.id}` with the ID value assigned by the Redfish API.
 
-3.  **Execute Command Example:**
+2.  **Execute Command Example:**
      
     ```bash
     python3 redfish_agent.py -u user_name -p user_password -r https://127.0.0.1:5101
