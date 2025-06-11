@@ -36,7 +36,7 @@ def parse_change_username_endpoint(endpoint, username_to_id_map):
             print(f"[!] Warning: No ID found for username {username_key}")
     return endpoint
 
-def find_username_id(method, endpoint, status_code, response_json, username_to_id_map):
+def update_username_id(method, endpoint, status_code, response_json, username_to_id_map):
     # Store username to ID mapping for account creation
     check_then_store = False
     if (method.upper() == "POST" and 
@@ -65,6 +65,51 @@ def find_username_id(method, endpoint, status_code, response_json, username_to_i
             username_to_id_map[username_value] = id_value
             print(f"[*] Stored mapping: {username_value} -> {id_value}")
 
+def get_id_username_map(root_url,username, password, username_to_id_map):
+    # Add get method with /redfish/v1/AccountService/Accounts endpoint to fetch existing accounts
+    get_accounts_endpoint = "/redfish/v1/AccountService/Accounts"
+    print(f"[*] Fetching existing accounts from {get_accounts_endpoint}")
+    url = urljoin(root_url, get_accounts_endpoint)
+    headers = {"Content-Type": "application/json"}
+    auth = (username, password)
+    try:
+        response = requests.get(
+            url=url,
+            auth=auth,
+            headers=headers,
+            verify=False,
+            timeout=10
+        )
+        if response.status_code == 200:
+            response_json = response.json()
+            if isinstance(response_json, dict) and "Members" in response_json:
+                for member in response_json["Members"]:
+                    #if "@odata.id" in member, use it as endpoint to fetch account details
+                    if "@odata.id" in member:
+                        account_url = urljoin(root_url, member["@odata.id"])
+                        account_response = requests.get(
+                            url=account_url,
+                            auth=auth,
+                            headers=headers,
+                            verify=False,
+                            timeout=10
+                        )
+                        if account_response.status_code == 200:
+                            account_data = account_response.json()
+                            if "UserName" in account_data and "Id" in account_data:
+                                username_to_id_map[account_data["UserName"]] = account_data["Id"]
+                                print(f"[*] Found existing account: {account_data['UserName']} -> {account_data['Id']}")
+                        else:
+                            print(f"[!] Failed to fetch account details: {account_response.status_code} - {account_response.text}")
+                    if "UserName" in member and "Id" in member:
+                        username_to_id_map[member["UserName"]] = member["Id"]
+                        print(f"[*] Found existing account: {member['UserName']} -> {member['Id']}")
+            print(f"[*] Finished fetching existing accounts.")
+        else:
+            print(f"[!] Failed to fetch accounts: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"[!] Error fetching accounts: {e}")
+
 def execute_redfish(username, password, root_url, excel_path='commands.xlsx', output_excel_path='output.xlsx'):
     try:
         wb = openpyxl.load_workbook(excel_path)
@@ -77,10 +122,14 @@ def execute_redfish(username, password, root_url, excel_path='commands.xlsx', ou
 
         # Dictionary to store username to id mappings
         username_to_id_map = {}
-        
+
+        get_id_username_map(root_url,username, password, username_to_id_map)
+        print(f"[*] Current username to ID mapping: {username_to_id_map}")
+
         for col_num, column_title in enumerate(["Method", "Endpoint", "Payload", "Status Code", "Response"], 1):
             column_letter = get_column_letter(col_num)
             output_sheet.column_dimensions[column_letter].width = max(10, len(column_title) + 2)  # Minimum width of 10
+
 
         for row_num, row in enumerate(sheet.iter_rows(min_row=2, values_only=True), 2):
             method, endpoint, payload = row
@@ -123,7 +172,7 @@ def execute_redfish(username, password, root_url, excel_path='commands.xlsx', ou
                     response_text = json.dumps(response_json, indent=4, ensure_ascii=False)
 
                     # Check if the response contains a username to ID mapping
-                    find_username_id(method, endpoint, status_code, response_json, username_to_id_map)
+                    update_username_id(method, endpoint, status_code, response_json, username_to_id_map)
 
                 except json.JSONDecodeError:
                     response_text = response.text  
