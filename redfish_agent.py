@@ -8,7 +8,7 @@ import ast
 import urllib3
 from urllib.parse import urljoin
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Alignment
+from openpyxl.styles import Alignment, PatternFill, Border, Side
 
 HTTP_METHODS = {"GET", "POST", "PATCH", "PUT", "DELETE"}
 MACRO_PATTERN = re.compile(r'\$\{([^}]+)\}')
@@ -396,7 +396,16 @@ def get_id_username_map(root_url,username, password, username_to_id_map):
     except Exception as e:
         print(f"[!] Error fetching accounts: {e}")
 
-def append_output_row(output_sheet, output_row_index, row_data):
+BATCH_ROW_FILL = PatternFill(fill_type="solid", start_color="FFFDE9D9", end_color="FFFDE9D9")
+BATCH_ROW_BORDER = Border(
+    left=Side(style="thin", color="FFD9D9D9"),
+    right=Side(style="thin", color="FFD9D9D9"),
+    top=Side(style="thin", color="FFD9D9D9"),
+    bottom=Side(style="thin", color="FFD9D9D9")
+)
+
+
+def append_output_row(output_sheet, output_row_index, row_data, highlight_batch=False):
     if isinstance(output_sheet, list):
         output_sheet.append(row_data)
         return
@@ -412,6 +421,9 @@ def append_output_row(output_sheet, output_row_index, row_data):
 
         cell = output_sheet.cell(row=output_row_index, column=col_num)
         cell.alignment = Alignment(wrap_text=True)
+        if highlight_batch:
+            cell.fill = BATCH_ROW_FILL
+            cell.border = BATCH_ROW_BORDER
 
     response_text = str(row_data[-1]) if row_data else ""
     num_lines = response_text.count('\n') + 1
@@ -664,17 +676,21 @@ def execute_command_block(
                 output_sheet,
                 output_row_index,
                 [f"BATCH_START({batch_name})", endpoint_raw, payload_raw, request_raw, "START", ""]
+                ,
+                highlight_batch=True
             )
             output_row_index += 1
 
             for batch_row in batch_output_rows:
-                append_output_row(output_sheet, output_row_index, batch_row)
+                append_output_row(output_sheet, output_row_index, batch_row, highlight_batch=True)
                 output_row_index += 1
 
             append_output_row(
                 output_sheet,
                 output_row_index,
                 [f"BATCH_END({batch_name})", endpoint_raw, payload_raw, request_raw, result["batch_status"] or "END", ""]
+                ,
+                highlight_batch=True
             )
             output_row_index += 1
             index += 1
