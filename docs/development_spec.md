@@ -162,12 +162,12 @@
 `IF` 語法:
 
 `Method = IF`
-`Payload = <left> == <right>`
+`Payload = <boolean_expression>`
 
 範例:
 
 `Method: IF`
-`Payload: ${CONTEXT.enable1} == true`
+`Payload: (${CONTEXT.code1} >= 200 and ${CONTEXT.code1} < 300) and not (${CONTEXT.enable1} == false)`
 
 ### 7.2 第二個關鍵規則 (條件運算限制)
 
