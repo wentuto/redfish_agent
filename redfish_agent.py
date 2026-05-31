@@ -493,7 +493,10 @@ def execute_command_block(
                 output_row_index += 1
                 return {"output_row_index": output_row_index, "terminated": False, "batch_status": "ERROR"}
 
-            batches[batch_name] = block
+            batches[batch_name] = {
+                "commands": block,
+                "input_schema": payload_raw or "",
+            }
             print(f"[*] Registered batch: {batch_name} ({len(block)} commands)")
             index = cursor + 1
             continue
@@ -614,6 +617,14 @@ def execute_command_block(
                 index += 1
                 continue
 
+            batch_def = batches[batch_name]
+            if isinstance(batch_def, dict):
+                batch_commands = batch_def.get("commands", [])
+                batch_input_schema = batch_def.get("input_schema", "")
+            else:
+                batch_commands = batch_def
+                batch_input_schema = ""
+
             try:
                 if argument_raw in [None, ""]:
                     argument_value = {}
@@ -646,7 +657,7 @@ def execute_command_block(
             batch_output_rows = []
 
             result = execute_command_block(
-                batches[batch_name],
+                batch_commands,
                 username,
                 password,
                 root_url,
@@ -675,7 +686,7 @@ def execute_command_block(
             append_output_row(
                 output_sheet,
                 output_row_index,
-                [f"BATCH_START({batch_name})", endpoint_raw, payload_raw, request_raw, "START", ""]
+                [f"BATCH_START({batch_name})", endpoint_raw, batch_input_schema, request_raw, "START", ""]
                 ,
                 highlight_batch=True
             )
@@ -688,7 +699,7 @@ def execute_command_block(
             append_output_row(
                 output_sheet,
                 output_row_index,
-                [f"BATCH_END({batch_name})", endpoint_raw, payload_raw, request_raw, result["batch_status"] or "END", ""]
+                [f"BATCH_END({batch_name})", endpoint_raw, "", request_raw, result["batch_status"] or "END", ""]
                 ,
                 highlight_batch=True
             )
@@ -724,6 +735,38 @@ def execute_command_block(
             )
             output_row_index += 1
             return {"output_row_index": output_row_index, "terminated": True, "batch_status": method_upper, "summary_row": summary_row}
+
+        if method_upper == "BATCH_DESC":
+            try:
+                desc_value = substitute_text(
+                    payload_raw,
+                    global_context,
+                    batch_context,
+                    None,
+                    None,
+                    username_to_id_map
+                )
+                if isinstance(desc_value, (dict, list)):
+                    response_text = json.dumps(desc_value, indent=4, ensure_ascii=False)
+                elif desc_value is None:
+                    response_text = ""
+                else:
+                    response_text = str(desc_value)
+
+                append_output_row(
+                    output_sheet,
+                    output_row_index,
+                    [method_raw, endpoint_raw, payload_raw, request_raw, "BATCH_DESC", response_text]
+                )
+            except Exception as exc:
+                append_output_row(
+                    output_sheet,
+                    output_row_index,
+                    [method_raw, endpoint_raw, payload_raw, request_raw, "Error", f"BATCH_DESC substitution error: {exc}"]
+                )
+            output_row_index += 1
+            index += 1
+            continue
 
         if method_upper == "MESSAGE":
             try:

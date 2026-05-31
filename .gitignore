@@ -1,3 +1,5 @@
 output.xlsx
 __pycache__/
 *.py[cod]
+gui/output/
+gui/*.json

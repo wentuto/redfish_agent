@@ -16,10 +16,24 @@ Redfish Agent executes command-driven Redfish workflows from an Excel file and w
 
 1. Install Python 3.8+.
 2. Clone the repository.
-3. Install dependencies:
+3. Activate the existing virtual environment (`.venv`):
+
+macOS / Linux:
 
 ```bash
-pip install -r requirements.txt
+source .venv/bin/activate
+```
+
+Windows (PowerShell):
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+4. Install dependencies:
+
+```bash
+python -m pip install -r requirements.txt
 ```
 
 Dependencies:
@@ -56,12 +70,18 @@ Legacy `${username.id}` remains compatible.
 - `IF`
     - Condition is written in `Payload`
     - Supports `==`, `!=`, `>`, `<`, `>=`, `<=`, `and`, `or`, `not`, and `()`
+- `BATCH_START(<BatchName>)`
+    - `Payload` can store the input schema / usage description for that batch
 - `BATCH(<BatchName>)`
     - Argument is written in `Payload`
+- `BATCH_DESC`
+    - Description is written in `Payload` and emitted to output when the batch runs
 - `MESSAGE`
     - Uses substituted `Payload` and writes it to output `Response`
 
 ## Run
+
+Before running commands below, ensure `.venv` is activated.
 
 Default input/output:
 

@@ -51,6 +51,7 @@ Column meaning:
 - `BATCH_START(<BatchName>)`
 - `BATCH_END(<BatchName>)`
 - `BATCH(<BatchName>)`
+- `BATCH_DESC`
 - `SUCCESS`
 - `ERROR`
 - `MESSAGE`
@@ -58,15 +59,24 @@ Column meaning:
 Control method argument placement:
 
 - `IF` condition is in `Payload`.
+- `BATCH_START` payload is used for input schema / usage description.
 - `BATCH(<BatchName>)` argument is in `Payload`.
+- `BATCH_DESC` description text is in `Payload`.
 - `MESSAGE` text is in `Payload`.
-- `BATCH_START/BATCH_END/ELSE/ENDIF/SUCCESS/ERROR` do not require `Payload`.
+- `BATCH_END/ELSE/ENDIF/SUCCESS/ERROR` do not require `Payload`.
 
 `MESSAGE` behavior:
 
 - No HTTP request is sent.
 - `Payload` is substituted first.
 - The substituted result is written to output `Response`.
+
+`BATCH_DESC` behavior:
+
+- Typically placed between `BATCH_START` and `BATCH_END`.
+- No HTTP request is sent.
+- `Payload` is substituted first.
+- One output row is written with `Status Code = BATCH_DESC`, and `Response` contains the description text.
 
 ## 5. Variable Namespaces and Macros
 
@@ -174,6 +184,8 @@ Not supported:
 
 Commands between `BATCH_START(BatchName)` and `BATCH_END(BatchName)` are stored as a reusable batch definition.
 
+`BATCH_START` payload should contain the input schema so users can understand how to use the batch without tracing the full block.
+
 ### 8.2 Execution
 
 `BATCH(BatchName)` executes that stored definition.
@@ -185,6 +197,8 @@ At execution time:
 3. Store argument into `${BATCH.CONTEXT}` (`input` key and expanded keys for objects).
 4. Execute internal commands.
 5. Stop at `SUCCESS` or `ERROR`.
+
+The `BATCH_START` payload is preserved and shown in the output workbook's `BATCH_START(<BatchName>)` row as the input schema / usage description.
 
 ### 8.3 SUCCESS / ERROR
 
@@ -209,7 +223,7 @@ Output columns:
 For batch execution, output order is:
 
 1. `BATCH(<BatchName>)` summary row (`Status Code` = `SUCCESS` or `ERROR`)
-2. `BATCH_START(<BatchName>)`
+2. `BATCH_START(<BatchName>)` row, showing the batch input schema / usage description
 3. Internal executed rows
 4. `BATCH_END(<BatchName>)`
 

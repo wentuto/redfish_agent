@@ -66,6 +66,7 @@
 - `BATCH_START(<BatchName>)`
 - `BATCH_END(<BatchName>)`
 - `BATCH(<BatchName>)`
+- `BATCH_DESC`
 - `SUCCESS`
 - `ERROR`
 - `MESSAGE`
@@ -73,15 +74,24 @@
 控制指令參數欄位規則:
 
 - `IF` 的 `<condition>` 寫在 `Payload` 欄位。
+- `BATCH_START` 的 `Payload` 用於描述 input schema / usage description。
 - `BATCH(<BatchName>)` 的 `<argument>` 寫在 `Payload` 欄位。
+- `BATCH_DESC` 的描述字串寫在 `Payload` 欄位。
 - `MESSAGE` 的輸出字串寫在 `Payload` 欄位。
-- `BATCH_START/BATCH_END/ELSE/ENDIF/SUCCESS/ERROR` 不使用 `Payload`。
+- `BATCH_END/ELSE/ENDIF/SUCCESS/ERROR` 不使用 `Payload`。
 
 `MESSAGE` 語意:
 
 - 當讀到 `MESSAGE` 時，不會發送 HTTP request。
 - 會先對 `Payload` 做 substitution。
 - substitution 後的結果會寫入 output Excel 的 `Response` 欄位。
+
+`BATCH_DESC` 語意:
+
+- 通常放在 `BATCH_START` 和 `BATCH_END` 中間。
+- 當該 batch 被執行到此指令時，不會發送 HTTP request。
+- 會先對 `Payload` 做 substitution。
+- substitution 後的結果會以一列寫入 output Excel，`Status Code` 欄位為 `BATCH_DESC`，`Response` 為描述內容。
 
 ## 5. 變數空間與 Macro 規格
 
@@ -162,12 +172,12 @@
 `IF` 語法:
 
 `Method = IF`
-`Payload = <boolean_expression>`
+`Payload = <left> == <right>`
 
 範例:
 
 `Method: IF`
-`Payload: (${CONTEXT.code1} >= 200 and ${CONTEXT.code1} < 300) and not (${CONTEXT.enable1} == false)`
+`Payload: ${CONTEXT.enable1} == true`
 
 ### 7.2 第二個關鍵規則 (條件運算限制)
 
@@ -212,6 +222,8 @@ IF 條件支援以下比較運算:
 
 `BATCH_START(BatchName)` 與 `BATCH_END(BatchName)` 之間所有列形成一個可重用 batch 定義。
 
+`BATCH_START` 的 `Payload` 建議放 input schema，讓使用者不必 trace 整段流程就能知道這個 batch 要怎麼使用。
+
 ### 8.2 BATCH 收集階段
 
 當主流程讀到 `BATCH_START(BatchName)`:
@@ -230,6 +242,8 @@ IF 條件支援以下比較運算:
 4. 將 `argument` 寫入 `${BATCH.CONTEXT}` (建議鍵名 `input` 或展開為物件)。
 5. 依序執行 batch 內部指令。
 6. 在遇到 `SUCCESS` 或 `ERROR` 時結束 batch。
+
+`BATCH_START` 的 `Payload` 會在執行 batch 時保留並顯示於 output workbook 的 `BATCH_START(<BatchName>)` 那一列，作為 input schema / usage description。
 
 ### 8.4 BATCH Context 行為
 
@@ -278,7 +292,7 @@ IF 條件支援以下比較運算:
 
 若主流程執行 `BATCH(<BatchName>)`，output Excel 應額外寫入 batch 範圍標記列:
 
-- 進入 batch 前寫入一列 `BATCH_START(<BatchName>)`
+- 進入 batch 前寫入一列 `BATCH_START(<BatchName>)`，其 `Payload` 顯示 input schema / usage description
 - batch 結束後寫入一列 `BATCH_END(<BatchName>)`
 
 這兩列用來界定 batch 在 output 中的實際執行範圍。
