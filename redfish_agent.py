@@ -326,20 +326,20 @@ def update_username_id(method, endpoint, status_code, response_json, username_to
     # Store username to ID mapping for account creation
     check_then_store = False
     if (method.upper() == "POST" and 
-        endpoint == "/redfish/v1/AccountService/Accounts" and 
+        endpoint.startswith("/redfish/v1/AccountService/Accounts") and 
         status_code == 201):
         check_then_store = True
         
     # Also store username to ID mapping from GET requests to specific account endpoints
     elif (method.upper() == "GET" and 
-            endpoint.startswith("/redfish/v1/AccountService/Accounts/") and
+            endpoint.startswith("/redfish/v1/AccountService/Accounts") and
             endpoint != "/redfish/v1/AccountService/Accounts/" and
             status_code == 200):
         check_then_store = True
 
     # Also store username to ID mapping from update operations (PATCH/PUT)
     elif ((method.upper() == "PATCH" or method.upper() == "PUT") and 
-            endpoint.startswith("/redfish/v1/AccountService/Accounts/") and
+            endpoint.startswith("/redfish/v1/AccountService/Accounts") and
             endpoint != "/redfish/v1/AccountService/Accounts/" and
             status_code in [200, 202, 204]):
         check_then_store = True
@@ -818,6 +818,10 @@ def execute_command_block(
         status_code = None
         response_json = None
         response_text = ""
+        
+        #print current username_to_id_map before substitution to help debugging
+        print(f"[*] Executing command at row {command['row_num']}: {method_upper} {endpoint_raw}")
+        print(f"[*] Current username_to_id_map before substitution: {json.dumps(username_to_id_map, ensure_ascii=False)}")
 
         try:
             endpoint = substitute_text(
@@ -867,6 +871,18 @@ def execute_command_block(
             except json.JSONDecodeError:
                 response_text = response.text
 
+            is_create_account = (
+                method_upper == "POST"
+                and endpoint == "/redfish/v1/AccountService/Accounts"
+            )
+            is_delete_account = (
+                method_upper == "DELETE"
+                and endpoint.startswith("/redfish/v1/AccountService/Accounts/")
+                and endpoint != "/redfish/v1/AccountService/Accounts/"
+            )
+            if is_create_account or is_delete_account:
+                print(f"[*] username_to_id_map after {method_upper} {endpoint}: {json.dumps(username_to_id_map, ensure_ascii=False)}")
+
             request_resolved_text = request_raw
             if request_raw and request_raw.strip() != "":
                 apply_request_rules(
@@ -887,6 +903,10 @@ def execute_command_block(
 
             print(f"Status Code: {status_code}")
             print(f"Response: {response_text}\n")
+            
+            #print current username_to_id_map before substitution to help debugging
+            print(f"[*] After command at row {command['row_num']}: {method_upper} {endpoint_raw}")
+            print(f"[*] Current username_to_id_map after substitution: {json.dumps(username_to_id_map, ensure_ascii=False)}")
 
         except Exception as exc:
             append_output_row(

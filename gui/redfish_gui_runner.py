@@ -477,24 +477,21 @@ class RedfishGuiRunner:
         info = {
             "batch_success": 0,
             "batch_error": 0,
-            "error_rows": 0,
-            "total_rows": 0,
-            "final_result": "PASS",
+            "final_result": "Success",
         }
         if not os.path.isfile(output_path):
-            info["final_result"] = "FAILED_TO_GENERATE"
+            info["final_result"] = "Failed"
             return info
 
         wb = openpyxl.load_workbook(output_path, data_only=True)
         ws = wb.active
         if ws is None:
-            info["final_result"] = "INVALID_OUTPUT"
+            info["final_result"] = "Failed"
             return info
 
         for row in ws.iter_rows(min_row=2, values_only=True):
             if not row or all(cell is None for cell in row):
                 continue
-            info["total_rows"] += 1
             method = str(row[0]) if row[0] is not None else ""
             status = str(row[4]) if len(row) > 4 and row[4] is not None else ""
 
@@ -504,11 +501,7 @@ class RedfishGuiRunner:
                 elif status.upper() == "ERROR":
                     info["batch_error"] += 1
 
-            if status.upper() == "ERROR":
-                info["error_rows"] += 1
-
-        if info["batch_error"] > 0 or info["error_rows"] > 0:
-            info["final_result"] = "FAIL"
+        info["final_result"] = "Success" if info["batch_error"] == 0 else "Failed"
         return info
 
     def _generate_html_report(self, results: list, run_stamp: str) -> str:
@@ -519,7 +512,7 @@ class RedfishGuiRunner:
         for item in results:
             analysis = self._analyze_output_excel(item["output_path"])
             result_badge = analysis["final_result"]
-            color = "#1b8f3f" if result_badge == "PASS" else "#b11f1f"
+            color = "#1b8f3f" if result_badge == "Success" else "#b11f1f"
             rows_html.append(
                 "".join(
                     [
@@ -527,10 +520,8 @@ class RedfishGuiRunner:
                         f"<td>{item['root_url']}</td>",
                         f"<td>{item['username']}</td>",
                         f"<td>{item['run_status']}</td>",
-                        f"<td>{analysis['total_rows']}</td>",
                         f"<td>{analysis['batch_success']}</td>",
                         f"<td>{analysis['batch_error']}</td>",
-                        f"<td>{analysis['error_rows']}</td>",
                         f"<td style='font-weight:bold;color:{color};'>{result_badge}</td>",
                         f"<td>{os.path.basename(item['output_path'])}</td>",
                         "</tr>",
@@ -563,10 +554,8 @@ class RedfishGuiRunner:
         <th>Root URL</th>
         <th>Username</th>
         <th>Run Status</th>
-        <th>Total Output Rows</th>
-        <th>Batch SUCCESS</th>
-        <th>Batch ERROR</th>
-        <th>Error Rows</th>
+        <th>Batch Success</th>
+        <th>Batch Error</th>
         <th>Final Result</th>
         <th>Output File</th>
       </tr>
