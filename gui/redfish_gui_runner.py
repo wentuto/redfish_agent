@@ -22,6 +22,7 @@ REPO_ROOT = os.path.dirname(SCRIPT_DIR)
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
+from multicast_discovery import MulticastMaster  # noqa: E402
 from redfish_agent import execute_redfish  # noqa: E402
 
 
@@ -43,6 +44,14 @@ class RedfishGuiRunner:
         self.test_excel_path = tk.StringVar()
         self.log_queue = queue.Queue()
         self.last_report_path = None
+
+        self.multicast_group = "224.0.0.250"
+        self.multicast_port = 19200
+        self.discovery_rounds = 5
+        self.discovery_interval = 2
+        self.discovery_timeout = 5
+        self.discovery_protocol_id = "DEV_DISCOVERY_V1"
+        self.discovery_secret = None
 
         self.output_dir = os.path.join(SCRIPT_DIR, "output")
         os.makedirs(self.output_dir, exist_ok=True)
@@ -108,6 +117,8 @@ class RedfishGuiRunner:
         ttk.Button(right_panel, text="Export Targets", command=self.export_targets).grid(
             row=1, column=1, sticky="ew", padx=5, pady=5
         )
+        self.search_button = ttk.Button(right_panel, text="Search Devices", command=self.search_devices)
+        self.search_button.grid(row=2, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
 
         right_panel.columnconfigure(0, weight=1)
         right_panel.columnconfigure(1, weight=1)
@@ -131,7 +142,7 @@ class RedfishGuiRunner:
         self.tree.bind("<<TreeviewSelect>>", self._on_tree_select)
 
         scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscroll=scrollbar.set)
+        self.tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         test_frame = ttk.LabelFrame(root, text="Test Input and Execution")
@@ -158,6 +169,18 @@ class RedfishGuiRunner:
 
     def log(self, message: str):
         self.log_queue.put(message)
+
+    def search_devices(self):
+        default_username = self.username_entry.get().strip()
+        default_password = self.password_entry.get().strip()
+
+        self.search_button.config(state=tk.DISABLED, text="Searching...")
+        self.log("Starting multicast device discovery...")
+        threading.Thread(
+            target=self.perform_multicast_search,
+            args=(default_username, default_password),
+            daemon=True,
+        ).start()
 
     def _start_log_poll(self):
         try:
@@ -188,6 +211,77 @@ class RedfishGuiRunner:
         self.tree.insert("", tk.END, values=(target.root_url, target.username, target.status))
 
         threading.Thread(target=self._check_status_single, args=(target,), daemon=True).start()
+
+    def _add_discovered_target(self, root_url: str, username: str, password: str):
+        if not root_url:
+            return
+
+        if any(target.root_url == root_url for target in self.targets):
+            self.log(f"Skipped discovered device already in list: {root_url}")
+            return
+
+        target = Target(root_url=root_url, username=username, password=password, status="Discovered")
+        self.targets.append(target)
+        self._refresh_target_list()
+        self.log(f"Discovered device added: {root_url}")
+
+    def perform_multicast_search(self, default_username: str, default_password: str):
+        """Perform multicast search for CDU devices using MulticastMaster"""
+
+        try:
+            def on_device_discovered(device):
+                ip_address = device.get("ip")
+                api_port = device.get("api_port")
+                if not ip_address:
+                    return
+
+                root_url = f"https://{ip_address}:{api_port}" if api_port else f"https://{ip_address}"
+                self.master.after(
+                    0,
+                    lambda url=root_url, username=default_username, password=default_password: self._add_discovered_target(
+                        url,
+                        username,
+                        password,
+                    ),
+                )
+
+            master = MulticastMaster(
+                multicast_group=self.multicast_group,
+                port=self.multicast_port,
+                total_rounds=self.discovery_rounds,
+                interval=self.discovery_interval,
+                response_timeout=self.discovery_timeout,
+                callback=on_device_discovered,
+                protocol_id=self.discovery_protocol_id,
+                secret=self.discovery_secret,
+            )
+
+            devices = master.discover()
+            stats = master.get_statistics()
+
+            if devices:
+                self.log(f"Discovery completed: {stats['total_devices']} device(s) found")
+                self.master.after(
+                    0,
+                    lambda count=stats["total_devices"]: messagebox.showinfo(
+                        "Search Complete",
+                        f"Discovery completed: {count} device(s) found",
+                    ),
+                )
+            else:
+                self.log("Discovery completed: No devices found")
+                self.master.after(
+                    0,
+                    lambda: messagebox.showinfo("Search Complete", "No CDU devices found"),
+                )
+
+        except Exception as exc:
+            error_msg = f"Failed to search for devices: {str(exc)}"
+            print(f"Multicast search error: {exc}")
+            self.log(f"Discovery error: {str(exc)}")
+            self.master.after(0, lambda msg=error_msg: messagebox.showerror("Search Error", msg))
+        finally:
+            self.master.after(0, lambda: self.search_button.config(state=tk.NORMAL, text="Search Devices"))
 
     def _check_status_single(self, target: Target):
         status = self._probe_connection(target)
